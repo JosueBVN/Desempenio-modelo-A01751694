@@ -1,125 +1,120 @@
-"""
-Autor : Josue Bernardo Villegas Nunio
-Matricula: A01751694
-Fecha de entrega: 06-09-2023
-Nombre del trabajo: Momento de Retroalimentación: Módulo 2 Análisis y Reporte sobre el desempeño del modelo. (Portafolio Análisis)
-"""
-
-import pandas as pd
+# Importa las bibliotecas necesarias
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.impute import SimpleImputer
-import seaborn as sns
+import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.datasets import load_breast_cancer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import learning_curve
+from sklearn.model_selection import validation_curve
+
+# Deshabilita las advertencias de convergencia
+import warnings
+warnings.filterwarnings("ignore")
 
 # Carga el conjunto de datos
-data = pd.read_csv('VSRR_Provisional_Drug_Overdose_Death_Counts.csv', na_values=['Data not shown due to suppression or insufficient data'])
+data = load_breast_cancer()
+X = data.data
+y = data.target
 
-# Elimina la columna 'Period' si no es relevante
-data.drop(columns=['Period'], inplace=True)
-
-# Manejo de Comas y Caracteres no Deseados
-def clean_numeric_columns(col):
-    if col.dtype == 'O':  # Solo aplica a columnas de tipo objeto (texto)
-        col = col.str.replace(',', '', regex=True).str.replace('%', '', regex=True).str.rstrip('_IMPORTANT')
-    return col
-
-data[['Data Value', 'Percent Complete', 'Percent Pending Investigation', 'Predicted Value']] = data[['Data Value', 'Percent Complete', 'Percent Pending Investigation', 'Predicted Value']].apply(clean_numeric_columns)
-
-# Manejo de Valores Faltantes con SimpleImputer después de limpiar las comas
-numeric_cols = ['Data Value', 'Percent Complete', 'Percent Pending Investigation', 'Predicted Value']
-imputer = SimpleImputer(strategy='mean')  # Puedes ajustar la estrategia según tus necesidades
-data[numeric_cols] = imputer.fit_transform(data[numeric_cols])
-
-# Manejo de Comas y Caracteres no Deseados
-def clean_numeric_columns(col):
-    if col.dtype == 'O':  # Solo aplica a columnas de tipo objeto (texto)
-        col = col.str.replace(',', '', regex=True).str.replace('%', '', regex=True).str.rstrip('_IMPORTANT')
-    return col.astype(float)
-
-data[['Data Value', 'Percent Complete', 'Percent Pending Investigation', 'Predicted Value']] = data[['Data Value', 'Percent Complete', 'Percent Pending Investigation', 'Predicted Value']].apply(clean_numeric_columns)
-
-# Manejo de Columnas de Fecha
-data['Date'] = pd.to_datetime(data['Year'].astype(str) + '-' + data['Month'] + '-01')
-
-# Codificacion de Columnas Categoricas
-data = pd.get_dummies(data, columns=['State', 'Month', 'State Name'], drop_first=True)
-
-# Codificacion de la columna 'Indicator' (target)
-label_encoder = LabelEncoder()
-data['Indicator'] = label_encoder.fit_transform(data['Indicator'])
-
-# Division de los datos en conjuntos de entrenamiento, prueba y validacion
-X = data.drop(columns=['Date', 'Indicator', 'Footnote', 'Footnote Symbol'])
-y = data['Indicator']
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.4, random_state=42)
+# Divide los datos en conjuntos de entrenamiento, prueba y validación
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42)
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
-# Imprime el tamaño de cada conjunto
-print(f"Tamaño del conjunto de entrenamiento: {len(X_train)} ejemplos")
-print(f"Tamaño del conjunto de validación: {len(X_val)} ejemplos")
-print(f"Tamaño del conjunto de prueba: {len(X_test)} ejemplos")
+# Normaliza los datos
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+X_test = scaler.transform(X_test)
 
-# Matriz de Correlación
-correlation_matrix = X_train.corr()
-plt.figure(figsize=(10, 8))
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-plt.title('Matriz de Correlación de Características')
-plt.show()
+# Entrena un modelo de Regresión Logística
+model = LogisticRegression(random_state=42)
+model.fit(X_train, y_train)
 
-# Entrenamiento y evaluación del modelo simple (Logistic Regression)
-model_simple = LogisticRegression(max_iter=1000)
-model_simple.fit(X_train, y_train)
-pred_simple_val = model_simple.predict(X_val)
-accuracy_simple_val = accuracy_score(y_val, pred_simple_val)
+# Evalúa el modelo en los conjuntos de entrenamiento, prueba y validación
+y_train_pred = model.predict(X_train)
+y_val_pred = model.predict(X_val)
+y_test_pred = model.predict(X_test)
 
-# Entrenamiento y evaluación del modelo complejo (Decision Tree)
-model_complex = DecisionTreeClassifier()
-model_complex.fit(X_train, y_train)
-pred_complex_val = model_complex.predict(X_val)
-accuracy_complex_val = accuracy_score(y_val, pred_complex_val)
+# Calcula métricas de rendimiento
+train_accuracy = accuracy_score(y_train, y_train_pred)
+val_accuracy = accuracy_score(y_val, y_val_pred)
+test_accuracy = accuracy_score(y_test, y_test_pred)
 
-print(f"Precision del modelo simple en validación: {accuracy_simple_val}")
-print(f"Precision del modelo complejo en validación: {accuracy_complex_val}")
+# Calcula matriz de Confusion
+confusion_train = confusion_matrix(y_train, y_train_pred)
+confusion_val = confusion_matrix(y_val, y_val_pred)
+confusion_test = confusion_matrix(y_test, y_test_pred)
 
-# Curvas ROC y AUC
-from sklearn.metrics import roc_curve, roc_auc_score
+# Muestra métricas de rendimiento y matrices de Confusion
+print(f"Train Accuracy: {train_accuracy}")
+print(f"Validation Accuracy: {val_accuracy}")
+print(f"Test Accuracy: {test_accuracy}")
 
-# Para el modelo simple
-y_prob_simple_val = model_simple.predict_proba(X_val)[:, 1]
-fpr_simple, tpr_simple, _ = roc_curve(y_val, y_prob_simple_val)
-roc_auc_simple = roc_auc_score(y_val, y_prob_simple_val)
+print("Matriz de Confusion en el conjunto de entrenamiento:")
+print(confusion_train)
 
-# Para el modelo complejo
-y_prob_complex_val = model_complex.predict_proba(X_val)[:, 1]
-fpr_complex, tpr_complex, _ = roc_curve(y_val, y_prob_complex_val)
-roc_auc_complex = roc_auc_score(y_val, y_prob_complex_val)
+print("Matriz de Confusion en el conjunto de validación:")
+print(confusion_val)
 
-plt.figure(figsize=(8, 6))
-plt.plot(fpr_simple, tpr_simple, label='ROC Curve (Simple Model) AUC = {:.2f}'.format(roc_auc_simple))
-plt.plot(fpr_complex, tpr_complex, label='ROC Curve (Complex Model) AUC = {:.2f}'.format(roc_auc_complex))
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('Curva ROC y AUC')
+print("Matriz de Confusion en el conjunto de prueba:")
+print(confusion_test)
+
+# Plotea curvas de aprendizaje para diagnosticar bias/variance
+train_sizes, train_scores, val_scores = learning_curve(model, X_train, y_train, cv=5)
+train_scores_mean = np.mean(train_scores, axis=1)
+val_scores_mean = np.mean(val_scores, axis=1)
+
+plt.figure(figsize=(10, 5))
+plt.title("Curva de Aprendizaje")
+plt.xlabel("Tamaño del conjunto de entrenamiento")
+plt.ylabel("Precisión")
+plt.plot(train_sizes, train_scores_mean, label="Train")
+plt.plot(train_sizes, val_scores_mean, label="Validation")
 plt.legend()
 plt.show()
 
-# Curva de Aprendizaje
-from sklearn.model_selection import learning_curve
+# Plotea curvas de validación para ajuste del modelo
+param_range = np.logspace(-3, 3, 7)
+train_scores, val_scores = validation_curve(
+    model, X_train, y_train, param_name="C", param_range=param_range, cv=5
+)
+train_scores_mean = np.mean(train_scores, axis=1)
+val_scores_mean = np.mean(val_scores, axis=1)
 
-train_sizes, train_scores, test_scores = learning_curve(model_complex, X_train, y_train, cv=5)
-train_mean = np.mean(train_scores, axis=1)
-test_mean = np.mean(test_scores, axis=1)
-
-plt.figure(figsize=(8, 6))
-plt.plot(train_sizes, train_mean, label='Entrenamiento')
-plt.plot(train_sizes, test_mean, label='Validación')
-plt.xlabel('Tamaño del Conjunto de Entrenamiento')
-plt.ylabel('Precisión Media')
-plt.title('Curva de Aprendizaje')
+plt.figure(figsize=(10, 5))
+plt.title("Curva de Validación para Ajuste del Modelo")
+plt.xlabel("Parámetro C")
+plt.ylabel("Precisión")
+plt.semilogx(param_range, train_scores_mean, label="Train")
+plt.semilogx(param_range, val_scores_mean, label="Validation")
 plt.legend()
+plt.show()
+
+# Calcula el tamaño de los conjuntos de entrenamiento y validación
+total_samples = len(X)
+train_size = len(X_train)
+val_size = len(X_val)
+
+# Etiquetas y tamaños de las porciones
+labels = ['Entrenamiento', 'Validación']
+sizes = [train_size, val_size]
+
+# Colores de las porciones
+colors = ['lightblue', 'lightgreen']
+
+# Explode: resalta la porción de validación
+explode = (0.1, 0)
+
+# Crea la gráfica de pastel
+plt.figure(figsize=(6, 6))
+plt.pie(sizes, labels=labels, colors=colors, explode=explode, autopct='%1.1f%%', shadow=True, startangle=140)
+plt.axis('equal')  # Asegura que el gráfico sea un círculo perfecto
+
+# Título
+plt.title('Proporción de Datos en Conjuntos de Entrenamiento y Validación')
+
+# Muestra la gráfica
 plt.show()
